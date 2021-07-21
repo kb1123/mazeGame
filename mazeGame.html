@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<style>
+canvas {
+	border: 1px solid #000000;
+	background-color: #ffffff;
+}
+body{
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	background: aliceblue;
+}
+#win-animation{
+	position: absolute;
+	background-color: rgba(0,0,0, 0.4);
+	display: none;
+	z-index: 10;
+	align-items: center;
+	flex-direction: column;
+	height: 100vh;
+	width: 100vw;
+}
+.winner-text{
+	text-shadow: 2px 2px 1px white;
+	font-family: Arial, Helvetica, sans-serif;
+	background-image: linear-gradient(to left, violet, indigo, blue, green, yellow, orange, red);
+}
+#how-to-play{
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	position: absolute;
+	z-index: 10;
+	background-color: rgba(0,0,0, 0.4);
+	height: 100vh;
+	width: 100vw;
+}
+#instructions > h1, h4{
+	color: white;
+	text-shadow: 2px 2px 1px black
+}
+#instructions{
+	margin-right: 20px;
+}
+#got-it-button{
+	background-color: lavender;
+	color: black;
+	font-family: Arial, Helvetica, sans-serif;
+	font-weight: bold;
+	font-size: 36px;
+	border: 3px solid black
+}
+</style>
+</head>
+<body onload="start()">
+
+<div id = 'win-animation'>
+	<h1 class = 'winner-text'>YOU WIN!!!</h1>
+	<h2 class = 'winner-text'>refresh the page for another maze...</h2>
+	<div style = "height: auto; width: auto; display: flex">
+		<img alt = "spinny car" src = "https://kamstuff.ddns.net/public/images/DimpledThoseEasternnewt-size_restricted.gif">
+		<img alt = "howard" src = "https://kamstuff.ddns.net/public/images/source.gif">
+	</div>
+	<div style = "height: auto; width: auto; display: flex">
+		<img alt = "bounce car" src = "https://kamstuff.ddns.net/public/images/graphics-car-567665.gif">
+		<img alt = "bounce car" src = "https://kamstuff.ddns.net/public/images/giphy.gif">
+	</div>
+</div>	
+<div id = 'how-to-play'>
+	<div style = "display: flex">
+		<div id = 'instructions'>
+			<h1>HOW TO PLAY</h1>
+			<h4>forward &#8593</h4>
+			<h4>backwards &#8595</h4>
+			<h4>steer left &#8592</h4>
+			<h4>steer right &#8594</h4>
+			<h4>put the blue car in the blue square</h4>
+			<h4>(smaller screens may need to zoom out)</h4>
+		</div>
+		<img alt = 'win image' height = '300px' src = 'https://kamstuff.ddns.net/public/images/car_victory.png'>
+	</div>
+	<button onclick = 'gotIt()' id = "got-it-button">got it.</button>
+</div>
+<canvas height = "700" width = "900" id = "myCanvas">your browser blah blah blah...</canvas>
+
+<script>
+
+const ACCELERATION = 0.45;
+const FRICTION = 0.25;
+const D_THETA = 0.018;
+const LIMIT_BOX = 120;
+const MAZE_WIDTH = 40 
+const MAZE_HEIGHT = 30
+
+var keyWatch = new KeyWatch();
+var car = new Car();
+var img = new Image();
+var maze = new Image();
+
+var finishLine = {x:0, y:0};
+var finishDepth = 0;
+
+var mazeOffset = {x:0, y:0}
+
+function start() {
+	img.src = "https://kamstuff.ddns.net/public/images/car_sprite.png"
+	img.onload = restOfStart
+}
+
+function restOfStart(){
+	console.log(img.width)
+
+	var canvas = document.getElementById("myCanvas");
+	var ctx = canvas.getContext("2d");
+
+	//copy car sprite to dataURL so i dont have to call my server over and over
+	var tempCanvas = document.createElement('canvas')
+	tempCanvas.width = img.width
+	tempCanvas.height = img.height
+	var tempCtx = tempCanvas.getContext("2d")
+	tempCtx.drawImage(img, 0, 0)
+	var dURL = tempCanvas.toDataURL()
+	img.src = dURL
+	img.onload = ""
+	//console.log(dURL)
+
+	//create a dummy canvas to generate the image data for the maze
+	var mCanvas = document.createElement('canvas')
+	mCanvas.width = MAZE_WIDTH*100
+	mCanvas.height = MAZE_HEIGHT*100
+	var mCtx = mCanvas.getContext('2d')
+	mCtx.fillStyle = "black";
+	mCtx.fillRect(0, 0, MAZE_WIDTH*100, MAZE_HEIGHT*100);
+	generate([{x:0, y:0}], MAZE_WIDTH, MAZE_HEIGHT, mCtx, 0);
+	mCtx.fillStyle = 'rgba(0,0,255,0.3)'
+	mCtx.fillRect(finishLine.x*100, finishLine.y*100,100,100)
+	maze.src = mCanvas.toDataURL();
+	//console.log(maze.src) //see the whole maze
+	mCtx.clearRect(0,0,MAZE_WIDTH*100,MAZE_HEIGHT*100);
+
+	/*ctx.clearRect(100,100,50,50);
+	var z = ctx.getImageData(0,0,900,700);
+	ctx.clearRect(0,0,900,700);
+	console.log("data cleared")
+	ctx.putImageData(z,0,0)
+	console.log("data pasted")*/
+
+	setInterval(() => {loop(ctx)}, 50) // 50
+}
+
+function loop(ctx){
+	car.physics(ctx);	//figure out where to put the car
+	ctx.clearRect(0, 0, 900, 700);
+	ctx.save();
+	ctx.translate(car.positionX, car.positionY);
+	ctx.rotate(car.heading);	//display the car's heading accurately
+	//ctx.fillStyle = "blue";
+	//ctx.fillRect(car.width/-2, car.height/-2, car.width, car.height);
+	ctx.drawImage(img, car.width/-2, car.height/-2, car.width, car.height);
+	ctx.restore();	
+	ctx.drawImage(maze, mazeOffset.x, mazeOffset.y);
+	//ctx.fillStyle = 'rgba(255,0,0,0.5)';
+	//ctx.fillRect(450,350,100,100);
+
+	/*ctx.fillStyle = "black";   // debug code to see collision-tracking dots
+	ctx.fillRect(car.checkPoints[0].x, car.checkPoints[0].y, 2, 2);
+	ctx.fillRect(car.checkPoints[1].x, car.checkPoints[1].y, 2, 2);
+	ctx.fillRect(car.checkPoints[2].x, car.checkPoints[2].y, 2, 2);
+	ctx.fillRect(car.checkPoints[3].x, car.checkPoints[3].y, 2, 2);
+	ctx.fillStyle = "white";
+	ctx.fillRect(car.positionX, car.positionY, 2, 2);*/
+}
+
+function Car() {
+	//describe PVA of vehicle
+	this.velocity = 0;
+	this.positionX = 40;
+	this.positionY = 30;
+	this.heading = Math.PI;
+	this.height = 30;
+	this.width = 40;
+	this.H = Math.hypot(this.width/2, this.height/2)-5;
+	this.theta = Math.atan(this.height/this.width)
+	this.checkPoints = []
+	
+	this.physics = (ctx) =>{
+		if(this.checkCollision(ctx)){
+			this.positionX += this.velocity*Math.cos(this.heading)*(-1.2)
+			this.positionY += this.velocity*Math.sin(this.heading)*(-1.2)
+			this.velocity = -0.5*this.velocity
+			return;
+		}
+
+		this.heading += D_THETA*-1*Math.sign(keyWatch.right)*this.velocity;    //update heading if steering wheel is turned
+		this.velocity = this.velocity + keyWatch.up*ACCELERATION - Math.sign(this.velocity)*FRICTION  //apply accelration and friction to velocity
+
+		
+
+		this.checkLimit();
+		/*if(this.checkLimit()){
+			this.moveMaze()
+		}else{
+			this.heading += D_THETA*-1*Math.sign(keyWatch.right)*this.velocity;    //update heading if steering wheel is turned
+			this.velocity = this.velocity + keyWatch.up*ACCELERATION - Math.sign(this.velocity)*FRICTION  //apply accelration and friction to velocity
+			this.positionX += Math.cos(this.heading)*this.velocity  //apply sin and cosine components of velocity to position
+			this.positionY += Math.sin(this.heading)*this.velocity
+		}*/
+		
+	}
+
+	this.checkLimit = () =>{
+		//check which border has been hit
+		if(this.positionX <= LIMIT_BOX){// left/right boder
+			if(mazeOffset.x < 0 && Math.cos(this.heading)*-1*this.velocity>0){//check if maze has reached its limit, 
+				this.moveMaze('h')
+			}else{//otherwise move the car in this direction
+				this.moveCar('h')
+			}
+		}else if(this.positionX >= 900 - LIMIT_BOX){
+			if(mazeOffset.x > 900-MAZE_WIDTH*100 && Math.cos(this.heading)*-1*this.velocity<0){
+				this.moveMaze('h')
+			}else{
+				this.moveCar('h')
+			}
+		}else{
+			this.moveCar('h')
+		}
+		
+		if(this.positionY <= LIMIT_BOX){// top/bottom boder
+			if(mazeOffset.y < 0 && Math.sin(this.heading)*-1*this.velocity>0){//check if maze has reached its limit, 
+				this.moveMaze('v')
+			}else{//otherwise move the car in this direction
+				this.moveCar('v')
+			}
+		}else if(this.positionY >= 700 - LIMIT_BOX){
+			if(mazeOffset.y > 700-MAZE_HEIGHT*100 && Math.sin(this.heading)*-1*this.velocity<0){
+				this.moveMaze('v')
+			}else{
+				this.moveCar('v')
+			}
+		}else{
+			this.moveCar('v')
+		}
+	}
+
+	this.moveMaze = (vh) =>{
+		switch(vh){
+			case 'h': 
+				if(this.positionX >= 900 - LIMIT_BOX){
+					mazeOffset.x -= Math.max(0, this.velocity*Math.cos(this.heading));
+				}else{
+					mazeOffset.x -= Math.min(0, this.velocity*Math.cos(this.heading));
+				}
+				break;
+			case 'v':
+				if(this.positionY >= 700 - LIMIT_BOX){
+					mazeOffset.y -= Math.max(0, this.velocity*Math.sin(this.heading));
+				}else{
+					mazeOffset.y -= Math.min(0, this.velocity*Math.sin(this.heading));
+				}
+			break;
+		}
+	}
+
+	this.moveCar = (vh) =>{
+		switch(vh){
+			case 'h': 
+				this.positionX += Math.cos(this.heading)*this.velocity;
+				break;
+			case 'v':
+				this.positionY += Math.sin(this.heading)*this.velocity;
+				break;
+		}
+	}
+
+	
+
+	this.checkCollision = (ctx) =>{
+		var checkPoints = [{x: this.positionX + this.H*Math.cos(this.heading - Math.PI/4),
+				    y: this.positionY + this.H*Math.sin(this.heading - Math.PI/4)},
+				   {x: this.positionX - this.H*Math.cos(this.heading - Math.PI/4),
+				    y: this.positionY - this.H*Math.sin(this.heading - Math.PI/4)},
+				   {x: this.positionX + this.H*Math.cos(this.heading - 3*Math.PI/4),
+				    y: this.positionY + this.H*Math.sin(this.heading - 3*Math.PI/4)},
+				   {x: this.positionX - this.H*Math.cos(this.heading - 3*Math.PI/4),
+				    y: this.positionY - this.H*Math.sin(this.heading - 3*Math.PI/4)},
+				]
+		this.checkPoints = checkPoints;
+		//console.log(ctx.getImageData(checkPoints[0].x, checkPoints[0].y,1,1).data); //debug code to inspect check points
+		
+		if(ctx.getImageData(checkPoints[0].x, checkPoints[0].y,1,1).data[2] > 100 &&
+		   ctx.getImageData(checkPoints[1].x, checkPoints[1].y,1,1).data[2] > 100 &&
+		   ctx.getImageData(checkPoints[2].x, checkPoints[2].y,1,1).data[2] > 100 &&
+		   ctx.getImageData(checkPoints[3].x, checkPoints[3].y,1,1).data[2] > 100 
+		){
+			win();
+		}
+
+		if(this.velocity<0){
+			if(ctx.getImageData(checkPoints[1].x, checkPoints[1].y,1,1).data[3] > 100){
+				return true;
+			}
+			if(ctx.getImageData(checkPoints[2].x, checkPoints[2].y,1,1).data[3] > 100){
+				return true;
+			}	
+		}else{
+			if(ctx.getImageData(checkPoints[0].x, checkPoints[0].y,1,1).data[3] > 100){
+				return true;
+			}
+			if(ctx.getImageData(checkPoints[3].x, checkPoints[3].y,1,1).data[3] > 100){
+				return true;
+			}
+		
+		}
+		return false;
+		
+		/*for(var j = 0; j<4; j++){
+			if(){
+				if(ctx.getImageData(checkPoints[j].x, checkPoints[j].y,1,1).data[3] > 100){
+					return true;
+				}	
+			}
+		}
+		return false;*/
+	}
+}
+
+function KeyWatch(){
+	this.up = 0;
+	this.right = 0;
+	//figure out if keys are up or down
+	this.upDown = (t) =>{
+		if (t == 'keyup'){
+			return 0;
+		}else if(t == 'keydown'){
+			return 1;
+		}
+	}
+	//figure out what direction the acceleration needs to go
+	this.handle = (e) =>{
+		switch(e.keyCode){
+			case 37:
+				this.right = this.upDown(e.type)*(-1);
+				break;
+			case 38:
+				this.up = this.upDown(e.type)*(-1);
+				break;
+			case 39:
+				this.right = this.upDown(e.type);
+				break;
+			case 40:
+				this.up = this.upDown(e.type);
+				break;
+		}
+		
+	}
+
+}
+
+//recursive DFS to generate the maze
+function generate(memory, width, height, ctx, depth){
+	var d = depth + 1
+	var test = [{x: 1, y: 0},{x: 0, y: 1},{x: -1, y: 0},{x: 0, y: -1}] // left right up down
+	var square = memory[memory.length-1]; //grab the current square
+	if(d>=finishDepth){
+		finishDepth = d
+		finishLine = {...square}  //move the finish line to the deepest part of the maze
+	}
+	for(var j = 4; j > 0; j--){
+		var t = test.splice(rand(j), 1)[0]
+		var c = {x: square.x + t.x, y: square.y + t.y}
+		if(memory.findIndex(e => e.x == c.x && e.y == c.y) !== -1 || c.x < 0 || c.x >= width || c.y < 0 || c.y >= height){ //pick off non-valid moves
+			continue;
+		}else{
+			memory.push(c)
+			carve(c, square, ctx);
+			generate(memory, width, height, ctx, d);
+		}
+	}
+	return;
+		
+}
+
+//random number generator function to keep code clean
+function rand(max){
+	return (max - Math.ceil(Math.random()*(max)));
+}
+
+//cut up the black maze area to form maze
+function carve(c, square, ctx){ 
+	//console.log(square, c) //debug code to inspect carving function 
+	var width = 0;
+	var height = 0;
+	var xPos = 0;
+	var yPos = 0;
+	switch(c.x - square.x){
+				case 1:
+					width = 180;
+					xPos = square.x*100 + 10;
+					break;
+				case 0:
+					width = 80;
+					xPos = square.x*100 + 10;
+					break;
+				case -1:
+					width = -180;
+					xPos = square.x*100 + 90;
+					break;
+			}
+	switch(c.y - square.y){
+				case 1:
+					height = 180;
+					yPos = square.y*100 + 10;
+					break;
+				case 0:
+					height = 80;
+					yPos = square.y*100 + 10;
+					break;
+				case -1:
+					height = -180;
+					yPos = square.y*100 + 90;
+					break;
+			}
+	ctx.clearRect(xPos, yPos, width, height); 
+}
+
+function win(){
+	var winDiv = document.getElementById('win-animation')
+	winDiv.style.display = 'flex'
+}
+
+function gotIt(){
+	var v = document.getElementById("how-to-play")
+	v.style.display = 'none';
+}
+
+
+//allow for keyboard control
+window.addEventListener("keyup", (e)=>{keyWatch.handle(e)});
+window.addEventListener("keydown", (e)=>{keyWatch.handle(e)});
+
+</script>
+
+</body>
+</html>
